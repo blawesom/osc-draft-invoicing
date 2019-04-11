@@ -45,12 +45,11 @@ def main():
         ak = config.get(account, 'ak')
         sk = config.get(account, 'sk')
 
-        icu_conn = IcuCall(access_key=ak, secret_key=sk, region=region, host='outscale.com')
+        icu_conn = IcuCall(access_key=ak, secret_key=sk, region_name=region, host='outscale.com', protocol='https')
         account_email = get_account(icu_conn)['Account']['Email']
 
-        # Pull catalog once
-        if not catalog:
-            catalog = get_catalog(icu_conn)
+        # Catalog is specific to each region
+        catalog = get_catalog(icu_conn)
             
         conso = get_consumption(icu_conn)
 
@@ -64,6 +63,7 @@ def main():
                     key_name = '.'.join([line['Service'], line['Operation'], line['Type']])
                     invoice_draft.append({'Account': account_email, 'Region': region,'Entry': key_name[7:], 'Quantity': line['Value'],'Cost': line['Value'] * entry['Value']/1000})
                     break
+        print('Account: {}  => OK'.format(account))
 
     # Output format in csv
     # account_id / region / item / quantity / cost
