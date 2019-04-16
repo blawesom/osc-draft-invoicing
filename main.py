@@ -23,28 +23,28 @@ def get_catalog(icu_conn):
     return icu_conn.response['Catalog']
 
 
-def get_consumption(icu_conn, from_date=DEFAULT_FROM_DATE, to_date=DEFAULT_TO_DATE):
-    icu_conn.make_request(call='ReadConsumptionAccount', FromDate=from_date, ToDate=to_date)
+def get_consumption(icu_conn, date_range):
+    icu_conn.make_request(call='ReadConsumptionAccount', FromDate=date_range['from_date'], ToDate=date_range['to_date'])
     return icu_conn.response
 
 
-def create_draft_bill(icu_conn, invoice_draft):
+def create_draft_bill(icu_conn, region, invoice_draft, date_range):
     # Catalog is specific to each region
     catalog = get_catalog(icu_conn)   
-    conso = get_consumption(icu_conn)
+    conso = get_consumption(icu_conn, date_range)
+    
+    # Get Account details
+    account_email = get_account(icu_conn)['Account']['Email']
 
     # Cross reference entry from consumption with matchin catalog entry and compute cost (quantity x unitprice)
     for line in conso['Entries']:
         if line['Zone'][-1].isalpha():
             line['Zone'] = line['Zone'][:-1]
-        invoice_draft.append(generate_invoice_line(line, catalog))
+        invoice_draft.append(generate_invoice_line(account_email, region, line, catalog))
     return invoice_draft
 
 
-def generate_invoice_line(line, catalog):
-    # Get Account details
-    account_email = get_account(icu_conn)['Account']['Email']
-
+def generate_invoice_line(account_email, region, line, catalog):
     # Create line reference for search in catalog
     key = '.'.join(['unitPrice', line['Service'], line['Operation'], line['Type'], line['Zone']])
     for entry in catalog['Entries']:
@@ -64,9 +64,11 @@ def generate_csv(invoice_draft):
     return True
 
 
-def main():
+def main(from_date=DEFAULT_FROM_DATE, to_date=DEFAULT_TO_DATE):
     catalog = None
     invoice_draft = []
+    date_range = {'from_date': from_date,
+                  'to_date': to_date}
 
     # Read config file
     config = ConfigParser()
@@ -81,7 +83,7 @@ def main():
 
         icu_conn = IcuCall(access_key=ak, secret_key=sk, region_name=region, host='outscale.com', https=True)
 
-        invoice_draft = create_draft_bill(icu_conn, invoice_draft)
+        invoice_draft = create_draft_bill(icu_conn, region, invoice_draft, date_range)
 
         print('Account: {}  => OK'.format(account))
 
