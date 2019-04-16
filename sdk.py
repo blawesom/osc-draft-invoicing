@@ -97,7 +97,7 @@ class ApiCall(object):
         self.access_key = kwargs.pop('access_key')
         self.secret_key = kwargs.pop('secret_key')
         self.version = kwargs.pop('version', DEFAULT_VERSION)
-        self.protocol = 'https' #if kwargs.pop('https', None) else 'http'
+        self.protocol = 'https' if kwargs.pop('https', None) else 'http'
         self.region = kwargs.pop('region_name', DEFAULT_REGION)
         self.host = '.'.join([self.SERVICE, self.region, kwargs.pop('host')])
 
