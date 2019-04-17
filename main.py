@@ -63,8 +63,8 @@ def generate_invoice_line(account_email, region, line, catalog):
     # Create line reference for search in catalog
     key = '.'.join(['unitPrice', line['Service'], line['Operation'], line['Type'], line['Zone']])
     for entry in catalog['Entries']:
+        key_name = '.'.join([line['Service'], line['Operation'], line['Type']])
         if entry['Key']==key:
-            key_name = '.'.join([line['Service'], line['Operation'], line['Type']])
             return {'Account': account_email, 'Region': region,'Entry': key_name[7:], 'Quantity': line['Value'],'Cost': line['Value'] * entry['Value']/1000}
         elif line.get('Type', '').startswith('BoxUsage:tina'):
             return {'Account': account_email, 'Region': region,'Entry': key_name[7:], 'Quantity': line['Value'],'Cost': line['Value'] * generate_tinatype_price(line, region, catalog)/1000}
