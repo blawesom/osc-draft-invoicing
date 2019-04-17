@@ -1,7 +1,5 @@
-
-import sys
+import re
 import csv
-import json
 import datetime
 from sdk import IcuCall
 from configparser import ConfigParser
@@ -44,6 +42,22 @@ def create_draft_bill(icu_conn, region, invoice_draft, date_range):
     return invoice_draft
 
 
+def generate_tinatype_price(line, region, catalog):
+    # Thx to Heckle for the regex hassle :)
+    elements = re.search('tina(.*).c(\d+)r(\d+)', line['Type'])
+    # gen = int(elements(1))
+    core_count = int(elements.group(2))
+    ram_count = int(elements.group(3))
+    os_type = re.search('RunInstances-(\d+)-OD', line['Type']).group(1)
+    for entry in catalog['Entries']:
+        if entry['Key'] == 'detailPrice.TinaOS-FCU.RunInstances-{}-OD.Custom{}'.format(os_type, 'Core'):
+            core_price = entry['Value']
+        elif entry['Key'] == 'detailPrice.TinaOS-FCU.RunInstances-{}-OD.Custom{}'.format(os_type, 'Ram'):
+            ram_price =  = entry['Value']
+    unit_price = core_count * core_price + ram_count * ram_price
+    return unit_price
+
+
 def generate_invoice_line(account_email, region, line, catalog):
     # Create line reference for search in catalog
     key = '.'.join(['unitPrice', line['Service'], line['Operation'], line['Type'], line['Zone']])
@@ -51,6 +65,10 @@ def generate_invoice_line(account_email, region, line, catalog):
         if entry['Key']==key:
             key_name = '.'.join([line['Service'], line['Operation'], line['Type']])
             return {'Account': account_email, 'Region': region,'Entry': key_name[7:], 'Quantity': line['Value'],'Cost': line['Value'] * entry['Value']/1000}
+        elif line.get('Type', '').startswith('BoxUsage:tina'):
+            return {'Account': account_email, 'Region': region,'Entry': key_name[7:], 'Quantity': line['Value'],'Cost': line['Value'] * generate_tinatype_price(line, region, catalog)/1000}
+        else:
+            print('Entry price for {} not determined'.format(entry['Key']))
 
 
 def generate_csv(invoice_draft):
