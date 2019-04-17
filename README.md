@@ -19,9 +19,11 @@ This tool or its output do not bind the provider or Outscale to the effective bi
     > python3 -m pip install -r requirements.txt
 3. Launch draft invoicing:
     > python3 main.py
+4. Customize date range with:
+    > python3 main.py 2019-01-01 2019-03-31
+
+If no date is provided, default date range is from the first day of the month, to yesterday. If only one date is provided, date range is from this date to yesterday.
 
 ### Notes
 
 Output is a CSV file with headers and ';' separator.
-
-Note: Default invoicing runs for the active period (1st of the active month up to yesterday).

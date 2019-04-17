@@ -1,4 +1,5 @@
 import re
+import sys
 import csv
 import datetime
 from sdk import IcuCall
@@ -53,7 +54,7 @@ def generate_tinatype_price(line, region, catalog):
         if entry['Key'] == 'detailPrice.TinaOS-FCU.RunInstances-{}-OD.Custom{}'.format(os_type, 'Core'):
             core_price = entry['Value']
         elif entry['Key'] == 'detailPrice.TinaOS-FCU.RunInstances-{}-OD.Custom{}'.format(os_type, 'Ram'):
-            ram_price =  = entry['Value']
+            ram_price = entry['Value']
     unit_price = core_count * core_price + ram_count * ram_price
     return unit_price
 
@@ -67,8 +68,8 @@ def generate_invoice_line(account_email, region, line, catalog):
             return {'Account': account_email, 'Region': region,'Entry': key_name[7:], 'Quantity': line['Value'],'Cost': line['Value'] * entry['Value']/1000}
         elif line.get('Type', '').startswith('BoxUsage:tina'):
             return {'Account': account_email, 'Region': region,'Entry': key_name[7:], 'Quantity': line['Value'],'Cost': line['Value'] * generate_tinatype_price(line, region, catalog)/1000}
-        else:
-            print('Entry price for {} not determined'.format(entry['Key']))
+        # else:
+        #     print('Entry price for {} not determined'.format(entry['Key']))
 
 
 def generate_csv(invoice_draft):
@@ -82,7 +83,8 @@ def generate_csv(invoice_draft):
     return True
 
 
-def main(from_date=DEFAULT_FROM_DATE, to_date=DEFAULT_TO_DATE):
+def main(dates):
+    from_date, to_date = dates[0:2]
     catalog = None
     invoice_draft = []
     date_range = {'from_date': from_date,
@@ -103,11 +105,31 @@ def main(from_date=DEFAULT_FROM_DATE, to_date=DEFAULT_TO_DATE):
 
         invoice_draft = create_draft_bill(icu_conn, region, invoice_draft, date_range)
 
-        print('Account: {}  => OK'.format(account))
+        print('Account: {} from {} to {} => OK'.format(account, from_date, to_date))
 
     if generate_csv(invoice_draft):
         print('\n\tExport completed from {} to {}: {}\n'.format(DEFAULT_FROM_DATE, DEFAULT_TO_DATE, 'export_{}.csv'.format(TODAY.isoformat())))
 
 
+def check_arg_dates(args):
+    if len(args) > 0:
+        dates=[]
+        for arg in args:
+            try:
+                dates.append(datetime.date.fromisoformat(arg))
+            except:
+                print('Date error')
+        if len(dates) == 1:
+            return args[0], DEFAULT_TO_DATE
+        elif dates[0] <= dates[1] or dates[1] >= datetime.date.today.isoformat():
+            print('Date error')
+            sys.exit(1)
+        else:
+            return args[0], args[1]
+    else:
+        return DEFAULT_FROM_DATE, DEFAULT_TO_DATE
+
+
 if __name__ == '__main__':
-    main()
+    
+    main(check_arg_dates(sys.argv[1:]))
