@@ -31,7 +31,6 @@ def create_draft_bill(icu_conn, region, invoice_draft, date_range):
     # Catalog is specific to each region
     catalog = get_catalog(icu_conn)   
     conso = get_consumption(icu_conn, date_range)
-    
     # Get Account details
     account_email = get_account(icu_conn)['Account']['Email']
 
@@ -68,8 +67,8 @@ def generate_invoice_line(account_email, region, line, catalog):
             return {'Account': account_email, 'Region': region,'Entry': key_name[7:], 'Quantity': line['Value'],'Cost': line['Value'] * entry['Value']/1000}
         elif line.get('Type', '').startswith('BoxUsage:tina'):
             return {'Account': account_email, 'Region': region,'Entry': key_name[7:], 'Quantity': line['Value'],'Cost': line['Value'] * generate_tinatype_price(line, region, catalog)/1000}
-        # else:
-        #     print('Entry price for {} not determined'.format(entry['Key']))
+    print('Entry price for {} not determined'.format(line['Type']))
+    return {'Account': account_email, 'Region': region,'Entry': key_name[7:], 'Quantity': line['Value'],'Cost': 0}
 
 
 def generate_csv(invoice_draft):
