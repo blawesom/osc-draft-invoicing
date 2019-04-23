@@ -48,11 +48,12 @@ def generate_tinatype_price(line, region, catalog):
     # gen = int(elements(1))
     core_count = int(elements.group(2))
     ram_count = int(elements.group(3))
-    os_type = re.search('RunInstances-(\d+)-OD', line['Type']).group(1)
+    key = '.'.join(['unitPrice', line['Service'], line['Operation'], line['Type'], line['Zone']])
+    os_type = re.search('RunInstances-(\d+)-OD', key).group(1)
     for entry in catalog['Entries']:
-        if entry['Key'] == 'detailPrice.TinaOS-FCU.RunInstances-{}-OD.Custom{}'.format(os_type, 'Core'):
+        if 'RunInstances-{}-OD.Custom{}'.format(os_type, 'Core') in entry['Key']:
             core_price = entry['Value']
-        elif entry['Key'] == 'detailPrice.TinaOS-FCU.RunInstances-{}-OD.Custom{}'.format(os_type, 'Ram'):
+        elif 'RunInstances-{}-OD.Custom{}'.format(os_type, 'Ram') in entry['Key']:
             ram_price = entry['Value']
     unit_price = core_count * core_price + ram_count * ram_price
     return unit_price
