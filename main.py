@@ -49,6 +49,10 @@ def create_draft_bill(icu_conn, region, invoice_draft, date_range):
 
 def generate_vm_price(line, region, catalog):
 
+    gpu_count = 0
+    gpu_model = ''
+    gpu_price = 0
+
     # if vm type is aws, translate to tinatype structure for price calculation
     if not line.get('Type', '').startswith('BoxUsage:tina'):
         vm_type = line.get('Type').split(':')[1]
@@ -60,6 +64,10 @@ def generate_vm_price(line, region, catalog):
             ram_count = int(vm_spec['ram/size'])
             perf = int(vm_spec['performance'])
             # TODO: handle GPU
+            if vm_spec['pci/gpu']:
+                gpu_count = int(vm_spec['pci/gpu'])
+                gpu_model = vm_spec['gpu_model_name']
+
         else:
             with open('draft-invoice.log', 'w+') as log:
                 log.write('\nERROR: Unable to compute {} price'.format(vm_type))
@@ -81,7 +89,10 @@ def generate_vm_price(line, region, catalog):
             core_price = entry['Value']
         elif 'RunInstances-OD.CustomRam' in entry['Key']:
             ram_price = entry['Value']
-    unit_price = core_count * core_price + ram_count * ram_price
+        elif gpu_count and 'unitPrice.TinaOS-FCU.AllocateGpu.Gpu:attach:{}'.format(gpu_model) in entry['Key']:
+            gpu_price = entry['Value']
+    
+    unit_price = core_count * core_price + ram_count * ram_price + gpu_count * gpu_price 
     return unit_price
 
 
