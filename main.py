@@ -10,6 +10,7 @@ TODAY=datetime.date.today()
 YESTERDAY=TODAY - datetime.timedelta(days=1)
 DEFAULT_FROM_DATE=datetime.date(TODAY.year, TODAY.month, 1).isoformat()
 DEFAULT_TO_DATE=YESTERDAY.isoformat()
+VM_MAP = csv.DictReader(open('vm_types.csv', encoding='utf-8-sig'), delimiter= ';')
 
 
 def get_account(icu_conn):
@@ -28,11 +29,16 @@ def get_consumption(icu_conn, date_range):
 
 
 def create_draft_bill(icu_conn, region, invoice_draft, date_range):
-    # Catalog is specific to each region
-    catalog = get_catalog(icu_conn)   
-    conso = get_consumption(icu_conn, date_range)
     # Get Account details
     account_email = get_account(icu_conn)['Account']['Email']
+    
+    # Catalog is specific to each region
+    catalog = get_catalog(icu_conn)   
+
+    # Get Consumption
+    with open('draft-invoice.log', 'w+') as log:
+        log.write('\nDEBUG: Querying consumption from {} to {} for {} account on {}...'.format(date_range['from_date'], date_range['to_date'], account_email, region))
+    conso = get_consumption(icu_conn, date_range)
 
     # Cross reference entry from consumption with matchin catalog entry and compute cost (quantity x unitprice)
     for line in conso['Entries']:
@@ -41,19 +47,39 @@ def create_draft_bill(icu_conn, region, invoice_draft, date_range):
         invoice_draft.append(generate_invoice_line(account_email, region, line, catalog))
     return invoice_draft
 
+def generate_vm_price(line, region, catalog):
 
-def generate_tinatype_price(line, region, catalog):
-    # Thx to Heckle for the regex hassle :)
-    elements = re.search('tina(.*).c(\d+)r(\d+)', line['Type'])
-    # gen = int(elements(1))
-    core_count = int(elements.group(2))
-    ram_count = int(elements.group(3))
-    key = '.'.join(['unitPrice', line['Service'], line['Operation'], line['Type'], line['Zone']])
-    os_type = re.search('RunInstances-(\d+)-OD', key).group(1)
+    # if vm type is aws, translate to tinatype structure for price calculation
+    if not line.get('Type', '').startswith('BoxUsage:tina'):
+        vm_type = line.get('Type').split(':')[1]
+        vm_spec = [vm for vm in VM_MAP if vm['name']==vm_type]
+        if vm_spec:
+            vm_spec=vm_spec[0]
+            gen = int(vm_spec['generation'])
+            core_count = int(vm_spec['core'])
+            ram_count = int(vm_spec['ram/size'])
+            perf = int(vm_spec['performance'])
+            # TODO: handle GPU
+        else:
+            with open('draft-invoice.log', 'w+') as log:
+                log.write('\nERROR: Unable to compute {} price'.format(vm_type))
+            return 0
+        
+    # vm type is tina type and require parsing
+    else:
+        # Thx to Heckle for the regex hassle :)
+        elements = re.search('tinav(\d).c(\d+)r(\d+)p(\d)', line['Type'])
+        gen = int(elements.group(1))
+        core_count = int(elements.group(2))
+        ram_count = int(elements.group(3))
+        perf = int(elements.group(4))
+        # not required now that licences are separately billed
+        # os_type = re.search('RunInstances-(\d+)-OD', key).group(1)
+
     for entry in catalog['Entries']:
-        if 'RunInstances-{}-OD.Custom{}'.format(os_type, 'Core') in entry['Key']:
+        if 'RunInstances-OD.CustomCore:v{}-p{}'.format(gen, perf) in entry['Key']:
             core_price = entry['Value']
-        elif 'RunInstances-{}-OD.Custom{}'.format(os_type, 'Ram') in entry['Key']:
+        elif 'RunInstances-OD.CustomRam' in entry['Key']:
             ram_price = entry['Value']
     unit_price = core_count * core_price + ram_count * ram_price
     return unit_price
@@ -64,11 +90,12 @@ def generate_invoice_line(account_email, region, line, catalog):
     key = '.'.join(['unitPrice', line['Service'], line['Operation'], line['Type'], line['Zone']])
     for entry in catalog['Entries']:
         key_name = '.'.join([line['Service'], line['Operation'], line['Type']])
-        if entry['Key']==key:
+        if line.get('Operation', '').startswith('RunInstances-OD'):
+            return {'Account': account_email, 'Region': region,'Entry': key_name[7:], 'Quantity': line['Value'],'Cost': line['Value'] * generate_vm_price(line, region, catalog)/1000}
+        elif entry['Key']==key:
             return {'Account': account_email, 'Region': region,'Entry': key_name[7:], 'Quantity': line['Value'],'Cost': line['Value'] * entry['Value']/1000}
-        elif line.get('Type', '').startswith('BoxUsage:tina'):
-            return {'Account': account_email, 'Region': region,'Entry': key_name[7:], 'Quantity': line['Value'],'Cost': line['Value'] * generate_tinatype_price(line, region, catalog)/1000}
-    print('Entry price for {} not determined'.format(line['Type']))
+    with open('draft-invoice.log', 'w+') as log:
+        log.write('\nERROR: Entry price for {} do not exist'.format(line['Type']))
     return {'Account': account_email, 'Region': region,'Entry': key_name[7:], 'Quantity': line['Value'],'Cost': 0}
 
 
@@ -104,11 +131,13 @@ def main(dates):
         icu_conn = IcuCall(access_key=ak, secret_key=sk, region_name=region, host='outscale.com', https=True)
 
         invoice_draft = create_draft_bill(icu_conn, region, invoice_draft, date_range)
-
-        print('Account: {} from {} to {} => OK'.format(account, from_date, to_date))
-
+        
+        with open('draft-invoice.log', 'w+') as log:
+            log.write('\nSUCCESS: Account {} from {} to {} => OK'.format(account, from_date, to_date))
     if generate_csv(invoice_draft):
-        print('\n\tExport completed from {} to {}: {}\n'.format(DEFAULT_FROM_DATE, DEFAULT_TO_DATE, 'export_{}.csv'.format(TODAY.isoformat())))
+        with open('draft-invoice.log', 'w+') as log:
+            log.write('\n\tExport completed from {} to {}: {}\n'.format(from_date, to_date, 'export_{}.csv'.format(TODAY.isoformat())))
+
 
 
 def check_arg_dates(args):
@@ -118,11 +147,13 @@ def check_arg_dates(args):
             try:
                 dates.append(datetime.date.fromisoformat(arg))
             except:
-                print('Date error')
+                with open('draft-invoice.log', 'w+') as log:
+                    log.write('\nERROR: Date Error')
         if len(dates) == 1:
             return args[0], DEFAULT_TO_DATE
-        elif dates[0] <= dates[1] or dates[1] >= datetime.date.today.isoformat():
-            print('Date error')
+        elif dates[0] >= dates[1] or dates[1] >= datetime.date.today():
+            with open('draft-invoice.log', 'w+') as log:
+                    log.write('\nERROR: Date Error')
             sys.exit(1)
         else:
             return args[0], args[1]
@@ -131,5 +162,9 @@ def check_arg_dates(args):
 
 
 if __name__ == '__main__':
-    
-    main(check_arg_dates(sys.argv[1:]))
+    try:
+        main(check_arg_dates(sys.argv[1:]))
+    except Exception as E:
+        with open('draft-invoice.log', 'w+') as log:
+            log.write('\n{}'.format(E))
+
