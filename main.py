@@ -36,7 +36,7 @@ def create_draft_bill(icu_conn, region, invoice_draft, date_range):
     catalog = get_catalog(icu_conn)   
 
     # Get Consumption
-    with open('draft-invoice.log', 'w+') as log:
+    with open('draft-invoice.log', 'a+') as log:
         log.write('\nDEBUG: Querying consumption from {} to {} for {} account on {}...'.format(date_range['from_date'], date_range['to_date'], account_email, region))
     conso = get_consumption(icu_conn, date_range)
 
@@ -63,13 +63,12 @@ def generate_vm_price(line, region, catalog):
             core_count = int(vm_spec['core'])
             ram_count = int(vm_spec['ram/size'])
             perf = int(vm_spec['performance'])
-            # TODO: handle GPU
             if vm_spec['pci/gpu']:
                 gpu_count = int(vm_spec['pci/gpu'])
                 gpu_model = vm_spec['gpu_model_name']
 
         else:
-            with open('draft-invoice.log', 'w+') as log:
+            with open('draft-invoice.log', 'a+') as log:
                 log.write('\nERROR: Unable to compute {} price'.format(vm_type))
             return 0
         
@@ -105,7 +104,7 @@ def generate_invoice_line(account_email, region, line, catalog):
             return {'Account': account_email, 'Region': region,'Entry': key_name[7:], 'Quantity': line['Value'],'Cost': line['Value'] * generate_vm_price(line, region, catalog)/1000}
         elif entry['Key']==key:
             return {'Account': account_email, 'Region': region,'Entry': key_name[7:], 'Quantity': line['Value'],'Cost': line['Value'] * entry['Value']/1000}
-    with open('draft-invoice.log', 'w+') as log:
+    with open('draft-invoice.log', 'a+') as log:
         log.write('\nERROR: Entry price for {} do not exist'.format(line['Type']))
     return {'Account': account_email, 'Region': region,'Entry': key_name[7:], 'Quantity': line['Value'],'Cost': 0}
 
@@ -143,10 +142,10 @@ def main(dates):
 
         invoice_draft = create_draft_bill(icu_conn, region, invoice_draft, date_range)
         
-        with open('draft-invoice.log', 'w+') as log:
+        with open('draft-invoice.log', 'a+') as log:
             log.write('\nSUCCESS: Account {} from {} to {} => OK'.format(account, from_date, to_date))
     if generate_csv(invoice_draft):
-        with open('draft-invoice.log', 'w+') as log:
+        with open('draft-invoice.log', 'a+') as log:
             log.write('\n\tExport completed from {} to {}: {}\n'.format(from_date, to_date, 'export_{}.csv'.format(TODAY.isoformat())))
 
 
@@ -158,12 +157,12 @@ def check_arg_dates(args):
             try:
                 dates.append(datetime.date.fromisoformat(arg))
             except:
-                with open('draft-invoice.log', 'w+') as log:
+                with open('draft-invoice.log', 'a+') as log:
                     log.write('\nERROR: Date Error')
         if len(dates) == 1:
             return args[0], DEFAULT_TO_DATE
         elif dates[0] >= dates[1] or dates[1] >= datetime.date.today():
-            with open('draft-invoice.log', 'w+') as log:
+            with open('draft-invoice.log', 'a+') as log:
                     log.write('\nERROR: Date Error')
             sys.exit(1)
         else:
@@ -176,6 +175,6 @@ if __name__ == '__main__':
     try:
         main(check_arg_dates(sys.argv[1:]))
     except Exception as E:
-        with open('draft-invoice.log', 'w+') as log:
+        with open('draft-invoice.log', 'a+') as log:
             log.write('\n{}'.format(E))
 
